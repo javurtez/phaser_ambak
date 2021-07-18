@@ -1,3 +1,6 @@
+## Note
+This phaser game uses typescript, phaser, and vite
+
 ## Get Started
 This is an example template. To try it out do the following:
 
