@@ -84,10 +84,9 @@ export default class Preloader extends Phaser.Scene {
 			y: height / 2 - 5,
 			text: "0%",
 			style: {
-				font: "18px monospace",
 				color: "#ffffff"
 			}
-		});
+		}).setFontFamily("kenney_pixel");
 		percentText.setOrigin(0.5, 0.5);
 
 		const assetText = this.make.text({
@@ -95,10 +94,9 @@ export default class Preloader extends Phaser.Scene {
 			y: height / 2 + 50,
 			text: "",
 			style: {
-				font: "18px monospace",
 				color: outerTextColor
 			}
-		});
+		}).setFontFamily("kenney_pixel");
 
 		assetText.setOrigin(0.5, 0.5);
 
