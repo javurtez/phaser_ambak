@@ -1,8 +1,9 @@
-import Utilities from "../../Utilities";
+import { Texture } from "../Managers/AssetManager";
+import BaseSprite from "../Trebert/Base/BaseSprite";
 
 export default class GroundPrefab extends Phaser.GameObjects.Container {
 
-    private groundList: Phaser.GameObjects.Sprite[] = [];
+    private groundList: BaseSprite[] = [];
     private nextGround: GroundPrefab;
     private prevGround: GroundPrefab;
 
@@ -10,17 +11,18 @@ export default class GroundPrefab extends Phaser.GameObjects.Container {
 
     private toFinalY: number = 0;
 
-    public IsGrounded(index: number) {
+    public isGrounded(index: number) {
         return this.groundedIndexList.includes(index);
     }
 
     constructor(scene: Phaser.Scene, x: number, y: number, index: number) {
         super(scene, x, y);
 
-        this.name = "Ground_" + index;
+        this.name = "ground_" + index;
 
         for (var i = 0; i < 5; i++) {
-            this.groundList.push(scene.add.sprite(-300 + (i * 150), 0, "ground"));
+            let ground = new BaseSprite(scene, -300 + (i * 150), 0, Texture.ground);
+            this.groundList.push(ground);
         }
 
         this.add(this.groundList);
@@ -28,24 +30,24 @@ export default class GroundPrefab extends Phaser.GameObjects.Container {
         scene.add.existing(this);
     }
 
-    public InitGround(): void {
+    public initGround(): void {
         for (var i = 0; i < this.groundList.length; i++) {
-            this.groundList[i].setTexture("null_ground");
+            this.groundList[i].setImage(Texture.no_ground);
         }
-        this.groundList[2].setTexture("ground");
+        this.groundList[2].setImage(Texture.ground);
         this.groundedIndexList.length = 0;
         this.groundedIndexList.push(2);
     }
-    public SetNextGround(n_ground: GroundPrefab, p_ground: GroundPrefab, isAdjust: boolean = true): void {
+    public setNextGround(n_ground: GroundPrefab, p_ground: GroundPrefab, isAdjust: boolean = true): void {
         this.nextGround = n_ground;
         this.prevGround = p_ground;
 
         if (!isAdjust) return;
-        this.nextGround.AdjustGround(this);
+        this.nextGround.adjustGround(this);
     }
-    private AdjustGround(ground: GroundPrefab): void {
+    private adjustGround(ground: GroundPrefab): void {
         for (var i = 0; i < this.groundList.length; i++) {
-            this.groundList[i].setTexture("null_ground");
+            this.groundList[i].setImage(Texture.no_ground);
         }
         this.groundedIndexList.length = 0;
         var wayPoint = Phaser.Math.Between(0, 100);
@@ -62,16 +64,16 @@ export default class GroundPrefab extends Phaser.GameObjects.Container {
         for (var i = 0; i < ground.groundedIndexList.length; i++) {
             const number = ground.groundedIndexList[i];
             if ((number - 1 >= 0 && !ground.groundedIndexList.includes(number - 1)) && (dir == "left" || dir == "both") || number == this.groundList.length - 1) {
-                this.groundList[number - 1].setTexture("ground");
+                this.groundList[number - 1].setImage(Texture.ground);
                 this.groundedIndexList.push(number - 1);
             }
             if (number + 1 < this.groundList.length && !ground.groundedIndexList.includes(number + 1) && (dir == "right" || dir == "both") || number == 0) {
-                this.groundList[number + 1].setTexture("ground");
+                this.groundList[number + 1].setImage(Texture.ground);
                 this.groundedIndexList.push(number + 1);
             }
         }
     }
-    public MoveDown(): void {
+    public moveGroundDown(): void {
         this.toFinalY = this.y + 200;
         this.scene.tweens.add({
             targets: this,
@@ -79,10 +81,10 @@ export default class GroundPrefab extends Phaser.GameObjects.Container {
             duration: 100,
             ease: "Linear",
             onComplete: () => {
-                Utilities.Log(this.name + "_" + this.y);
+                console.log(this.name + "_" + this.y);
                 if (this.y >= 700) {
                     this.y = this.prevGround.toFinalY - 200;
-                    this.AdjustGround(this.prevGround);
+                    this.adjustGround(this.prevGround);
                 }
             }
         });

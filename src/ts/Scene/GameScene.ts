@@ -1,38 +1,81 @@
-import Constants from "../../Constants";
-import Utilities from "../../Utilities";
+import { Audio, JSON, Texture } from "../Managers/AssetManager";
 import AudioManager from "../Managers/AudioManager";
+import { EventManager } from "../Managers/EventManager";
+import JSONManager from "../Managers/JSONManager";
+import { CLOUD, SaveManager } from "../Managers/SaveManager";
 import GroundPrefab from "../Prefab/GroundPrefab";
-import GameOverPanel from "../UI/GameOverPanel";
-import ScorePanel from "../UI/ScorePanel";
+import BaseSprite from "../Trebert/Base/BaseSprite";
+import { TBCloud } from "../Trebert/TBCloud";
+import { Constants } from "../Trebert/TBConst";
+import { TBUtils } from "../Trebert/TBUtils";
+import BaseScene from "./BaseScene";
+import GameOverScene from "./GameOverScene";
+import GameUI from "./GameUI";
 
-const maxTimer = 20;
-export default class GameScene extends Phaser.Scene {
+export default class GameScene extends BaseScene {
     /**
      * Unique name of the scene.
      */
     public static Name = "MainGame";
 
     groundPrefabList: GroundPrefab[] = [];
-    playerObject: Phaser.GameObjects.Sprite;
-
-    currentGroundGroupIndex: number = 0;
-    currentGroundIndex: number = 0;
+    playerObject: BaseSprite;
+    currentGroundIndex: number;
+    timer: number;
     isGameOver: boolean = false;
     isMoving: boolean = false;
     startMoving: boolean = false;
 
-    gameOverPanel: GameOverPanel;
-    scorePanel: ScorePanel;
+    currentGroundGroupIndex: number = 0;
+    divisibleBy: number;
+    timerToAddDivisibleBy: number;
 
-    score: number;
-    timer: number = maxTimer;
-
+    public init(): void {
+        super.init();
+    }
     public create(): void {
-        Utilities.LogSceneMethodEntry("MainGame", "create");
+        super.create();
 
+        AudioManager.Instance.playBGM(Audio.Old_Game_Theater);
+        this.scene.launch(GameUI.Name);
+    }
+    public update(): void {
+        if (this.isGameOver) return;
+        if (!this.startMoving) return;
+        let rawDelta = this.game.loop.rawDelta / 1000;
+        this.timer -= rawDelta;
+        if (this.timer <= 0) {
+            this.timer = 0;
+            this.gameOver();
+        }
+
+        EventManager.UPDATE_UI.emit("TIMER", this.timer);
+    }
+
+    protected initProperty(): void {
+        this.currentGroundIndex = 2;
+
+        let gameSettings = JSONManager.Instance.getJSON(JSON.game_settings);
+        this.divisibleBy = gameSettings.divisibleBy;
+        this.timerToAddDivisibleBy = gameSettings.timerToAddDivisibleBy;
+        this.timer = gameSettings.timer;
+
+        this.currentGroundGroupIndex = 0;
+
+        this.isGameOver = false;
+        this.isMoving = false;
+        this.startMoving = false;
+
+        this.groundPrefabList = [];
+
+        TBCloud.setValue("SCORE", 0);
+
+        this.time.delayedCall(10, () => {
+            EventManager.UPDATE_UI.emit("TIMER", this.timer);
+        });
+    }
+    protected initGraphics(): void {
         this.cameras.main.backgroundColor = Phaser.Display.Color.HexStringToColor(Constants.BackgroundHex);
-
-        AudioManager.Instance.PlayBGM(this, "gameplaybgm");
 
         const centerX = this.cameras.main.centerX;
         const centerY = this.cameras.main.centerY;
@@ -43,92 +86,43 @@ export default class GameScene extends Phaser.Scene {
         this.groundPrefabList.push(new GroundPrefab(this, centerX, centerY - 400, 3));
         this.groundPrefabList.push(new GroundPrefab(this, centerX, centerY - 600, 4));
 
-        this.groundPrefabList[0].InitGround();
-        this.groundPrefabList[0].SetNextGround(this.groundPrefabList[1], this.groundPrefabList[4]);
-        this.groundPrefabList[1].SetNextGround(this.groundPrefabList[2], this.groundPrefabList[0]);
-        this.groundPrefabList[2].SetNextGround(this.groundPrefabList[3], this.groundPrefabList[1]);
-        this.groundPrefabList[3].SetNextGround(this.groundPrefabList[4], this.groundPrefabList[2]);
-        this.groundPrefabList[4].SetNextGround(this.groundPrefabList[0], this.groundPrefabList[3], false);
+        this.groundPrefabList[0].initGround();
+        this.groundPrefabList[0].setNextGround(this.groundPrefabList[1], this.groundPrefabList[4]);
+        this.groundPrefabList[1].setNextGround(this.groundPrefabList[2], this.groundPrefabList[0]);
+        this.groundPrefabList[2].setNextGround(this.groundPrefabList[3], this.groundPrefabList[1]);
+        this.groundPrefabList[3].setNextGround(this.groundPrefabList[4], this.groundPrefabList[2]);
+        this.groundPrefabList[4].setNextGround(this.groundPrefabList[0], this.groundPrefabList[3], false);
 
-        this.playerObject = this.add.sprite(centerX, centerY + 140, "player").setOrigin(.5);
+        this.playerObject = new BaseSprite(this, centerX, centerY + 140, Texture.player).setOrigin(.5);
+    }
+    protected initListeners(): void {
+        this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A).on(Phaser.Input.Keyboard.Events.DOWN, () => this.playerMove("left"), this);
+        this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D).on(Phaser.Input.Keyboard.Events.DOWN, () => this.playerMove("right"), this);
 
-        this.currentGroundIndex = 2;
-        this.score = 0;
-        this.timer = maxTimer;
+        this.input.on(Phaser.Input.Events.POINTER_DOWN, (pointer) => {
+            var touchX = pointer.x;
 
-        this.input.keyboard.addKey("A").on('down', () => this.PlayerMove("left"), this);
-        this.input.keyboard.addKey("D").on('down', () => this.PlayerMove("right"), this);
-
-        this.gameOverPanel = new GameOverPanel(this, centerX, centerY);
-        this.scorePanel = new ScorePanel(this, centerX, 20);
-
-        this.scorePanel.SetTimer(this.timer);
-        this.scorePanel.SetScore(this.score);
+            if (touchX < TBUtils.config.world.centerX) {
+                this.playerMove("left");
+            }
+            else if (touchX > TBUtils.config.world.centerX) {
+                this.playerMove("right");
+            }
+        }, this);
     }
 
-    public update(): void {
-        if (this.isGameOver) return;
-        if (!this.startMoving) return;
-        this.timer -= .02;
-        if (this.timer <= 0) {
-            this.GameOver();
-            this.timer = 0;
-        }
-        this.scorePanel.SetTimer(this.timer);
-    }
-
-    public ResetLevel(): void {
-        const centerY = this.cameras.main.centerY;
-        const centerX = this.cameras.main.centerX;
-
-        this.groundPrefabList[0].y = centerY + 200;
-        this.groundPrefabList[1].y = centerY;
-        this.groundPrefabList[2].y = centerY - 200;
-        this.groundPrefabList[3].y = centerY - 400;
-        this.groundPrefabList[4].y = centerY - 600;
-
-        this.groundPrefabList[0].InitGround();
-        this.groundPrefabList[0].SetNextGround(this.groundPrefabList[1], this.groundPrefabList[4]);
-        this.groundPrefabList[1].SetNextGround(this.groundPrefabList[2], this.groundPrefabList[0]);
-        this.groundPrefabList[2].SetNextGround(this.groundPrefabList[3], this.groundPrefabList[1]);
-        this.groundPrefabList[3].SetNextGround(this.groundPrefabList[4], this.groundPrefabList[2]);
-        this.groundPrefabList[4].SetNextGround(this.groundPrefabList[0], this.groundPrefabList[3], false);
-
-        this.playerObject.x = centerX;
-        this.playerObject.y = centerY + 140;
-
-        this.isGameOver = false;
-        this.isMoving = false;
-
-        this.gameOverPanel.Close();
-
-        this.currentGroundGroupIndex = 0;
-        this.currentGroundIndex = 2;
-
-        this.score = 0;
-        this.timer = maxTimer;
-        this.startMoving = false;
-
-        this.scorePanel.SetTimer(this.timer);
-        this.scorePanel.SetScore(this.score);
-        
-        AudioManager.Instance.PlayBGM(this, "gameplaybgm");
-
-        this.tweens.pauseAll();
-    }
-
-    private PlayerMove(dir: string): void {
+    private playerMove(dir: string): void {
         if (this.isGameOver) return;
         if (this.isMoving) return;
         if (this.currentGroundIndex == 0 && dir == "left") return;
         if (this.currentGroundIndex == 4 && dir == "right") return;
 
-        AudioManager.Instance.PlaySFXOneShot(this, "jump", .2);
+        AudioManager.Instance.playSFX(Audio.jump, .3);
 
         this.isMoving = true;
         this.startMoving = true;
         this.groundPrefabList.forEach((groundPrefab) => {
-            groundPrefab.MoveDown();
+            groundPrefab.moveGroundDown();
         });
         this.tweens.add({
             targets: this.playerObject,
@@ -139,23 +133,24 @@ export default class GameScene extends Phaser.Scene {
                 this.currentGroundIndex += dir == "left" ? -1 : 1;
                 this.currentGroundGroupIndex++;
                 this.isMoving = false;
-                if (this.groundPrefabList[this.currentGroundGroupIndex % this.groundPrefabList.length].IsGrounded(this.currentGroundIndex)) {
-                    Utilities.Log("Grounded");
+                if (this.groundPrefabList[this.currentGroundGroupIndex % this.groundPrefabList.length].isGrounded(this.currentGroundIndex)) {
+                    console.log("Grounded");
 
-                    this.score++;
-                    this.timer += .4;
-                    this.scorePanel.SetScore(this.score);
+                    TBCloud.modifyValue("SCORE", 1);
+                    let score = TBCloud.getValue("SCORE");
+                    if (score % this.divisibleBy == 0) {
+                        this.timer += this.timerToAddDivisibleBy;
+                    }
+                    EventManager.UPDATE_UI.emit("SCORE", score);
                 }
                 else {
-                    Utilities.Log("Not Grounded");
-
-                    this.GameOver();
+                    console.log("Not Grounded");
+                    this.gameOver();
                 }
             }
         });
     }
-
-    private GameOver(): void {
+    private gameOver(): void {
         this.isGameOver = true;
         this.tweens.add({
             targets: this.playerObject,
@@ -164,19 +159,34 @@ export default class GameScene extends Phaser.Scene {
             ease: "Linear"
         });
 
-        AudioManager.Instance.PauseBGM(this, "gameplaybgm");
-        AudioManager.Instance.PlaySFXOneShot(this, "gameover", .4);
+        AudioManager.Instance.pauseBGM();
+        AudioManager.Instance.playSFX(Audio.gameover, .4);
 
         this.time.delayedCall(100, () => {
-            var isHighScore = false;
-            var localHighScore = parseInt(localStorage.getItem(Constants.ScoreKey)) || 0;
-            if (localHighScore < this.score) {
-                localHighScore = this.score;
-                localStorage.setItem(Constants.ScoreKey, localHighScore.toString());
-                isHighScore = true;
+            var localHighScore = TBCloud.getValue(CLOUD.HIGHSCORE);
+            let currentScore = TBCloud.getValue("SCORE");
+            if (localHighScore < currentScore) {
+                localHighScore = currentScore;
+                TBCloud.setValue(CLOUD.HIGHSCORE, localHighScore);
+                SaveManager.Instance.saveData();
             }
-            this.gameOverPanel.Open();
-            this.gameOverPanel.SetScore(this.score, localHighScore, isHighScore);
+
+            this.scene.stop(GameUI.Name);
+            this.scene.launch(GameOverScene.Name);
         });
+    }
+
+    protected rescale(): void {
+        super.rescale();
+    }
+    protected destroy(): void {
+        this.scene.stop(GameUI.Name);
+
+        super.destroy();
+
+        EventManager.ON_PAUSE.clear();
+        EventManager.ON_UNPAUSE.clear();
+
+        EventManager.CHANGE_LANGUAGE.clear();
     }
 }

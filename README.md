@@ -1,27 +1,35 @@
-# Game Project uses Phaser 3 with Visual Studio Code, TypeScript, and Vite
+# TrebertGames Project AMBAK
+* A simple hyper casual game that player needs to jump onto the next ground.
 
-## Source
-https://github.com/ubershmekel/vite-phaser-ts-starter
+### Version
+* Phaser 3.55.2
 
-## Game
-https://javurtez.itch.io/ambak
+### Maintainers
+* Melbert Bolocon
 
-## How to Build the Site
-To build this project you'll need [Node.js](https://nodejs.org) installed.
+### Setup
+* Clone project into local directory
+* npm install (This will install necessary nodes)
+* npm run start (This will run the game locally; localhost:3000)
+* npm run build (Builds files into 'public' folder)
+* npm run prod (Builds files into 'public' folder. This build has no console logs. Good for final release!)
 
-1. Clone this repo
-2. Run `npm install`
-3. Run `npm run dev`
-4. Run `npm run build` after modifying code to populate the **dist** directory with the final site contents.
-5. You should see a URL where your game shows up
+### Asset Folder
+* Place the assets in Initial folder if it will be appearing only in MenuScene
+* Place the assets in Gameplay folder if it will be used in the game when player is already playing
+* #Audio - For Audio(mp3, ogg) files only
+* #Font - For Bitmap Font files only
+* #Sprites - For Sprites/Textures/Atlas(w/ JSON) only
 
-```
-{
-  "scripts": {
-    "dev": "vite", // start dev server
-    "build": "vite build", // build for production
-    "serve": "vite preview" // locally preview production build
-  }
-}
+### Automate Asset Manager
+* Use BuildAssetManager.exe in order to automate and fill src/ts/Managers/AssetManager.ts for type-safe of using assets
 
-```
+### Texture Packer
+* Free Texture Packer: https://free-tex-packer.com/
+
+### Bitmap Font Generator
+* Bitmap Font Generator Online: https://snowb.org/
+
+### Image Compressor
+* Online Image Compressor: https://imagecompressor.com/
+* Tiny PNG: https://tinypng.com/

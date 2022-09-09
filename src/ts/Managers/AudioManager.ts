@@ -1,19 +1,31 @@
-import Constants from "../../Constants";
+import { TBCloud } from "../Trebert/TBCloud";
+import { CLOUD } from "./SaveManager";
 
 export default class AudioManager {
     private static audioManagerSingleton: AudioManager;
 
-    private allBackgroundAudio: Phaser.Sound.BaseSound[] = [];
+    private sceneSoundManager: Phaser.Sound.BaseSoundManager;
+
+    private currentBGMAudio: Phaser.Sound.BaseSound;
 
     private isMute: boolean;
-    private volume: number;
 
-    public static Init(): void {
+    private bgmVolume: number = .5;
+    private sfxVolume: number = .5;
+
+    public static init(scene: Phaser.Scene, config: any): void {
         if (!AudioManager.audioManagerSingleton) {
-            AudioManager.audioManagerSingleton = new AudioManager();
+            this.audioManagerSingleton = new AudioManager();
 
-            AudioManager.audioManagerSingleton.SetMute((localStorage.getItem(Constants.MuteSaveKey) == "1" ? true : false) || false);
-        } else {
+            this.audioManagerSingleton.isMute = TBCloud.getValue(CLOUD.IS_MUTED);
+            this.audioManagerSingleton.bgmVolume = config.bgmVolume;
+            this.audioManagerSingleton.sfxVolume = config.sfxVolume;
+
+            this.audioManagerSingleton.setMute(this.audioManagerSingleton.isMute);
+
+            this.audioManagerSingleton.sceneSoundManager = scene.sound;
+        }
+        else {
             throw new Error('You can only initialize one manager instance');
         }
     }
@@ -26,76 +38,104 @@ export default class AudioManager {
         return AudioManager.audioManagerSingleton;
     }
 
-    set Volume(volume: number) {
-        this.volume = volume;
-    }
-    get Volume() {
-        return this.volume;
-    }
     get IsMuted() {
         return this.isMute;
     }
 
-    public SetMute(isMute: boolean): void {
+    public setBGMVolume(vol: number): void {
+        this.bgmVolume = vol;
+    }
+    public setSFXVolume(vol: number): void {
+        this.sfxVolume = vol;
+    }
+
+    public setMute(isMute: boolean, isSave: boolean = true): void {
         this.isMute = isMute;
 
         if (this.isMute) {
-            for (var i = 0; i < this.allBackgroundAudio.length; i++) {
-                this.allBackgroundAudio[i].pause();
-            }
+            this.currentBGMAudio?.pause();
         }
-        else {
-            for (var i = 0; i < this.allBackgroundAudio.length; i++) {
-                this.allBackgroundAudio[i].resume();
-            }
+        else if (this.isBGMPause()) {
+            this.currentBGMAudio?.resume();
         }
-        localStorage.setItem(Constants.MuteSaveKey, this.isMute ? "1" : "0")
+
+        if (isSave == false) return;
+        TBCloud.setValue(CLOUD.IS_MUTED, this.isMute);
     }
-    public PlaySFXOneShot(scene: Phaser.Scene, key: string, volumeSfx: number = -1): void {
-        if (this.isMute) return;
-        scene.sound.play(key, {
-            volume: volumeSfx == -1 ? this.volume : volumeSfx
-        });
-    }
-    public PlaySFX(scene: Phaser.Scene, key: string, volumeSfx: number = -1): void {
-        let sfx: Phaser.Sound.BaseSound = scene.sound.get(key);
+    public playSFX(key: any, volumeSfx: number = -1, completeFunc: Function = undefined, context: any = undefined): void {
+        let sfx: Phaser.Sound.BaseSound = this.sceneSoundManager.get(key.path);
 
         if (!sfx) {
-            sfx = scene.sound.add(key, {
-                mute: this.isMute,
-                volume: volumeSfx == - 1 ? this.volume : volumeSfx,
+            sfx = this.sceneSoundManager.add(key.path, {
+                volume: volumeSfx == -1 ? this.sfxVolume : volumeSfx,
                 loop: false
             });
         }
 
+        let sfxContext = context == undefined ? this.sceneSoundManager : context;
+
         if (!this.isMute) {
             sfx.play();
+
+            if (completeFunc != undefined) {
+                sfx.on("complete", completeFunc, sfxContext);
+            }
+        }
+        else {
+            if (completeFunc != undefined) {
+                setTimeout(function () { completeFunc.call(sfxContext); }, sfx.duration * 1000);
+            }
         }
     }
-    public PauseBGM(scene: Phaser.Scene, key: string): void {
-        let bgm: Phaser.Sound.BaseSound = scene.sound.get(key);
-
-        if (!bgm) return;
-
-        bgm.pause();
+    public stopSFX(key: any) {
+        let sound = this.sceneSoundManager.get(key.path);
+        if (sound != undefined) {
+            this.sceneSoundManager.stopByKey(key.path);
+        }
     }
-    public PlayBGM(scene: Phaser.Scene, key: string): void {
-        let bgm: Phaser.Sound.BaseSound = scene.sound.get(key);
 
-        if (!bgm) {
-            bgm = scene.sound.add(key, {
+    public isBGMPause(): boolean {
+        if (!this.currentBGMAudio) return false;
+        return this.currentBGMAudio.isPaused;
+    }
+    public playBGM(key: any, volume: number = -1, replayIfSame: boolean = false): void {
+        let bgm: Phaser.Sound.BaseSound = this.sceneSoundManager.get(key.path);
+
+        if (replayIfSame && bgm != undefined) {
+            bgm.pause();
+        }
+
+        if (volume != -1) {
+            this.setBGMVolume(volume);
+        }
+        if (!bgm || replayIfSame == true) {
+            bgm = this.sceneSoundManager.add(key.path, {
                 loop: true,
-                volume: .6
+                volume: volume == -1 ? this.bgmVolume : volume
             });
-            this.allBackgroundAudio.push(bgm);
+            if (replayIfSame == false) {
+                this.currentBGMAudio?.stop();
+            }
+            this.currentBGMAudio = bgm;
             bgm.play();
+        }
+        else {
+            if (this.currentBGMAudio != bgm) {
+                this.currentBGMAudio.pause();
+                bgm.play();
+                this.currentBGMAudio = bgm;
+            }
         }
 
         if (this.isMute) {
             bgm.pause();
         }
-        else { 
-            bgm.play();
+        else if (this.isBGMPause() && this.isMute == false) {
+            bgm.resume();
         }
+    }
+    public pauseBGM(): void {
+        if (!this.currentBGMAudio) return;
+        this.currentBGMAudio.pause();
     }
 }
